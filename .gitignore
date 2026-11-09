@@ -1,0 +1,12 @@
+/target
+/dist
+/apps/web/dist
+**/.gradle/
+**/build/
+**/local.properties
+**/jniLibs/
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks

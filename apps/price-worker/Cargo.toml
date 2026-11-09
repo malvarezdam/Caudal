@@ -1,0 +1,10 @@
+[package]
+name = "caudal-price-worker"
+description = "Actualizacion programada de precios y tipos de cambio."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+caudal-core.workspace = true

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd apps\\web&& set NO_COLOR=true&& trunk serve --port 8088"],
+      "port": 8088
+    }
+  ]
+}

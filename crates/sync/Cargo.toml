@@ -1,0 +1,10 @@
+[package]
+name = "caudal-sync"
+description = "Motor de sincronizacion y trait LocalStore."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+caudal-core.workspace = true
