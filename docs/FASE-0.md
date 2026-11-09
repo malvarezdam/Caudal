@@ -6,10 +6,11 @@ Fecha: 2026-11-09. Pruebas locales en Windows 11 y emulador Android (API 37, x86
 
 | Punto | Estado |
 |---|---|
-| Workspace y Git | Hecho (sin commits todavía) |
-| Compilación Windows, WASM y Android | Hecho en local |
-| CI | Archivo creado; **sin ejecutar**, falta repositorio en GitHub |
-| Supabase (desarrollo y producción) | **Pendiente**: requiere cuenta del usuario |
+| Workspace y Git | Hecho; repositorio `malvarezdam/Caudal` |
+| Compilación Windows, WASM y Android | Hecho en local y en CI |
+| CI | En verde en las tres plataformas (2026-11-09) |
+| Supabase desarrollo | Hecho; conexión y clave pública comprobadas. Nuevas tablas sin exposición automática y con RLS automática |
+| Supabase producción | Se crea en la Fase 9, para no gastar un proyecto gratuito que se pausaría sin uso |
 | Decisión Android | Tomada, con pruebas pendientes en teléfono real |
 | Decisión fuentes de precios | Tomada para desarrollo; licencia pública pendiente |
 

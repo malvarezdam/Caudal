@@ -18,6 +18,8 @@ caudal-app-state = { path = "crates/app-state" }
 
 rust_decimal = { version = "1.43", features = ["serde-str"] }
 serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"] }
+uuid = { version = "1", features = ["serde"] }
 thiserror = "2"
 reqwest = { version = "0.13", features = ["json"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
