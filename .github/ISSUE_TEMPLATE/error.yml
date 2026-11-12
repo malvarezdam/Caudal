@@ -1,0 +1,31 @@
+name: Informar un error
+description: Algo no funciona como debería.
+labels: ["error"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Plataforma
+      multiple: true
+      options: [Windows, Android, Web]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasó
+      description: Qué hiciste, qué esperabas y qué ocurrió.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducirlo
+      placeholder: "1. Abrir Inversiones\n2. ..."
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidad
+      options:
+        - label: No incluí montos reales, correos ni datos de mis cuentas.
+          required: true

@@ -1,0 +1,13 @@
+{
+  "name": "Caudal",
+  "short_name": "Caudal",
+  "description": "Finanzas personales con o sin conexión.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171a1b",
+  "theme_color": "#1f8a80",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

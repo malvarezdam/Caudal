@@ -15,7 +15,8 @@ declare
     'profiles', 'accounts', 'categories', 'tags', 'transactions',
     'transaction_splits', 'contacts', 'debts', 'debt_installments',
     'debt_payments', 'recurring_rules', 'budgets', 'goals',
-    'goal_contributions', 'assets', 'trades'
+    'goal_contributions', 'assets', 'trades', 'price_alerts',
+    'category_rules', 'transaction_templates', 'attachments'
   ];
   shared_tables constant text[] := array['asset_prices', 'fx_rates'];
   t text;
@@ -54,6 +55,10 @@ begin
   insert into public.goal_contributions (id, user_id, updated_at, goal_id, amount, contributed_on) values (x, a, '0001', x, 1, '2026-01-01');
   insert into public.assets (id, user_id, updated_at, name, currency) values (x, a, '0001', 'a', 'USD');
   insert into public.trades (id, user_id, updated_at, asset_id, kind, traded_on, currency) values (x, a, '0001', x, 'buy', '2026-01-01', 'USD');
+  insert into public.price_alerts (id, user_id, updated_at, asset_id, direction, target_price) values (x, a, '0001', x, 'above', 1);
+  insert into public.category_rules (id, user_id, updated_at, pattern, category_id) values (x, a, '0001', 'uber', x);
+  insert into public.transaction_templates (id, user_id, updated_at, name, currency) values (x, a, '0001', 'Café', 'USD');
+  insert into public.attachments (id, user_id, updated_at, transaction_id, file_name, mime_type, size_bytes, storage_path) values (x, a, '0001', x, 'boleta.jpg', 'image/jpeg', 10, a::text || '/' || x::text);
 
   foreach t in array user_tables loop
     execute format('select to_jsonb(r) from public.%I r where user_id = $1', t)
@@ -166,6 +171,59 @@ begin
 
     perform set_config('role', 'none', true);
   end loop;
+
+  -- Las funciones y el registro del worker no están al alcance de los usuarios.
+  perform set_config('request.jwt.claims', claims_a, true);
+  perform set_config('role', 'authenticated', true);
+  begin
+    perform * from public.held_symbols();
+    raise exception 'FALLO: un usuario lista los símbolos de todos' using errcode = 'P0001';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform * from public.currencies_in_use();
+    raise exception 'FALLO: un usuario lista las monedas de todos' using errcode = 'P0001';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.price_runs;
+    raise exception 'FALLO: un usuario lee price_runs' using errcode = 'P0001';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('role', 'none', true);
+
+  -- El worker sí ve el símbolo de A una sola vez.
+  insert into public.assets (id, user_id, updated_at, name, currency, provider, provider_symbol)
+    values (gen_random_uuid(), b, '0001', 'Apple', 'USD', 'eodhd', 'AAPL.US'),
+           (gen_random_uuid(), a, '0001', 'Apple', 'USD', 'eodhd', 'aapl.us');
+  select count(*) into n from public.held_symbols() h where upper(h.symbol) = 'AAPL.US';
+  if n <> 1 then raise exception 'FALLO: held_symbols repite símbolos (%)', n; end if;
+
+  -- Un comprobante no puede apuntar a la carpeta de otro usuario.
+  begin
+    insert into public.attachments (id, user_id, updated_at, transaction_id, file_name, mime_type, size_bytes, storage_path)
+      values (gen_random_uuid(), a, '0001', x, 'f.pdf', 'application/pdf', 1, b::text || '/robado');
+    raise exception 'FALLO: adjunto con ruta de otro usuario' using errcode = 'P0001';
+  exception when check_violation then null;
+  end;
+
+  -- Archivos: cada usuario solo ve los de su carpeta.
+  insert into storage.objects (bucket_id, name) values
+    ('receipts', a::text || '/' || x::text),
+    ('receipts', b::text || '/otro');
+  perform set_config('request.jwt.claims', claims_b, true);
+  perform set_config('role', 'authenticated', true);
+  select count(*) into n from storage.objects where bucket_id = 'receipts';
+  if n <> 1 then raise exception 'FALLO: B ve % archivos de receipts', n; end if;
+  update storage.objects set name = b::text || '/movido' where name = a::text || '/' || x::text;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FALLO: B mueve archivos de A'; end if;
+  begin
+    insert into storage.objects (bucket_id, name) values ('receipts', a::text || '/intruso');
+    raise exception 'FALLO: B escribe en la carpeta de A' using errcode = 'P0001';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('role', 'none', true);
 
   -- Reglas del dominio.
   begin

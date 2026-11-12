@@ -197,7 +197,8 @@ Las fases 4, 5 y 6 pueden avanzar en cualquier orden.
 **Procesos**
 - Auditoría de RLS, secretos y dependencias (`cargo audit`).
 - Pruebas de rendimiento con 100 000 movimientos.
-- Pruebas de extremo a extremo y migración de versiones de base local.
+- Pruebas de extremo a extremo con un Supabase local (Docker), donde Claude crea cuentas de prueba y recorre registro, confirmación, login, recuperación de contraseña, sincronización entre dispositivos y eliminación de cuenta en las tres plataformas. Después, el usuario repite el registro en el Supabase real.
+- Migración de versiones de la base local.
 - Copias de seguridad del servidor y prueba de restauración.
 - Confirmación de correo, límites contra abuso y eliminación total de cuenta.
 - Política de privacidad, términos y aviso de que la app no asesora.

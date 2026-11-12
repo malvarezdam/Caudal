@@ -20,8 +20,17 @@ rust_decimal = { version = "1.43", features = ["serde-str"] }
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"] }
 uuid = { version = "1", features = ["serde"] }
+# Conserva el texto exacto de los números: los importes no pasan por f64.
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+js-sys = "0.3"
+pollster = "1"
+proptest = "1"
+wiremock = "0.6"
 thiserror = "2"
-reqwest = { version = "0.13", features = ["json"] }
+csv = "1"
+sha2 = "0.10"
+base64 = "0.22"
+reqwest = { version = "0.13", features = ["json", "query"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 rexie = "0.6"
 wasm-bindgen = "0.2"

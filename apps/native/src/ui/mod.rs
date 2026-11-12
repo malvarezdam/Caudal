@@ -1,0 +1,11 @@
+pub mod auth;
+pub mod charts;
+pub mod data;
+pub mod debts;
+pub mod dialogs;
+pub mod invest;
+pub mod onboarding;
+pub mod pages;
+pub mod reports;
+pub mod theme;
+pub mod widgets;

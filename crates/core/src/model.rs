@@ -7,7 +7,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Marca del reloj lógico híbrido, comparable como texto. Se genera en la Fase 2.
+/// Marca del reloj lógico híbrido, comparable como texto (ver `hlc`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Hlc(pub String);
@@ -318,7 +318,9 @@ pub enum AssetKind {
 }
 
 /// Fuente del precio; `Manual` no se actualiza automáticamente.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PriceProviderId {
     Eodhd,
@@ -370,6 +372,80 @@ pub struct Trade {
     pub split_ratio: Option<Decimal>,
     pub account_id: Option<Uuid>,
     pub transaction_id: Option<Uuid>,
+    pub note: Option<String>,
+}
+
+/// Regla de autocategorización: si la descripción contiene el texto, se
+/// sugiere la categoría. Gana el texto más largo que coincida.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CategoryRule {
+    #[serde(flatten)]
+    pub meta: SyncMeta,
+    /// Se compara sin mayúsculas ni tildes.
+    pub pattern: String,
+    pub category_id: Uuid,
+    #[serde(default)]
+    pub tag_ids: Vec<Uuid>,
+    #[serde(default = "enabled")]
+    pub active: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+/// Plantilla de movimiento para registrar con un toque lo habitual.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransactionTemplate {
+    #[serde(flatten)]
+    pub meta: SyncMeta,
+    pub name: String,
+    #[serde(default)]
+    pub kind: TransactionKind,
+    /// Vacío: se escribe al usarla.
+    pub amount: Option<Decimal>,
+    pub currency: Currency,
+    pub account_id: Option<Uuid>,
+    pub to_account_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
+    #[serde(default)]
+    pub tag_ids: Vec<Uuid>,
+    pub description: Option<String>,
+}
+
+/// Comprobante adjunto a un movimiento. El archivo vive en Supabase Storage,
+/// en la carpeta del usuario; aquí solo están sus datos.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attachment {
+    #[serde(flatten)]
+    pub meta: SyncMeta,
+    pub transaction_id: Uuid,
+    pub file_name: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    /// `{user_id}/{id}` dentro del bucket `receipts`.
+    pub storage_path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlertDirection {
+    /// Avisa cuando el precio llega o supera el objetivo.
+    Above,
+    /// Avisa cuando el precio llega o baja del objetivo.
+    Below,
+}
+
+/// Aviso cuando un activo cruza un precio. Solo informa; no opera.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PriceAlert {
+    #[serde(flatten)]
+    pub meta: SyncMeta,
+    pub asset_id: Uuid,
+    pub direction: AlertDirection,
+    /// En la moneda del activo.
+    pub target_price: Decimal,
+    pub active: bool,
     pub note: Option<String>,
 }
 

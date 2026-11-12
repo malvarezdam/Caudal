@@ -14,9 +14,9 @@ pub struct AccountBalance {
 }
 
 /// Saldo de cada cuenta no borrada. Los movimientos pendientes y borrados no cuentan.
-pub fn account_balances(
+pub fn account_balances<'a>(
     accounts: &[Account],
-    transactions: &[Transaction],
+    transactions: impl IntoIterator<Item = &'a Transaction>,
 ) -> Result<BTreeMap<Uuid, AccountBalance>, MoneyError> {
     let mut balances: BTreeMap<Uuid, (&Account, AccountBalance)> = accounts
         .iter()
@@ -31,7 +31,7 @@ pub fn account_balances(
         .collect();
 
     let counted = transactions
-        .iter()
+        .into_iter()
         .filter(|tx| !tx.meta.is_deleted() && tx.status == TransactionStatus::Confirmed);
     for tx in counted {
         let source_sign = match tx.kind {
