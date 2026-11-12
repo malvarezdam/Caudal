@@ -646,6 +646,81 @@ impl<S: LocalStore> AppCore<S> {
             Err(caudal_sync::SyncError::Store(error)) => Err(AppError::storage(error)),
         }
     }
+
+    /// Borra todos los datos locales de este dispositivo (tablas, perfil, cola y caché).
+    pub async fn clear_local(&self) -> Result<(), AppError> {
+        let store = self.repo.store();
+        for record in store
+            .list(Table::Attachments)
+            .await
+            .map_err(AppError::storage)?
+        {
+            let _ = store
+                .set_meta(&format!("attachment:{}", record.id), "")
+                .await;
+        }
+        for table in Table::ALL {
+            for record in self
+                .repo
+                .list_active(table)
+                .await
+                .map_err(AppError::storage)?
+            {
+                self.repo
+                    .delete(table, record.id)
+                    .await
+                    .map_err(AppError::storage)?;
+            }
+            store
+                .set_cursor(table, 0)
+                .await
+                .map_err(AppError::storage)?;
+        }
+        let entries = store.outbox(usize::MAX).await.map_err(AppError::storage)?;
+        store.ack(&entries).await.map_err(AppError::storage)?;
+        for key in [
+            LAST_FULL_SYNC,
+            MARKET,
+            MARKET_CHECKED,
+            "attachments_pending",
+        ] {
+            store.set_meta(key, "").await.map_err(AppError::storage)?;
+        }
+        Ok(())
+    }
+
+    /// Elimina por completo la cuenta del usuario:
+    /// 1. Borra los archivos de `receipts/{user_id}/` con la API de Storage.
+    /// 2. Borra el usuario en `auth.users` (y todas sus filas en cascada) mediante
+    ///    `public.delete_account()`.
+    /// 3. Limpia los datos locales del dispositivo.
+    pub async fn delete_account(&self, client: &SupabaseClient) -> Result<(), AppError> {
+        let mut paths = Vec::new();
+        for record in self
+            .repo
+            .store()
+            .list(Table::Attachments)
+            .await
+            .map_err(AppError::storage)?
+        {
+            if let Some(path) = record
+                .row
+                .get("storage_path")
+                .and_then(serde_json::Value::as_str)
+            {
+                paths.push(path.to_owned());
+            }
+        }
+        client
+            .delete_user_receipts(&paths)
+            .await
+            .map_err(|error| AppError::from(&error))?;
+        client
+            .delete_account()
+            .await
+            .map_err(|error| AppError::from(&error))?;
+        self.clear_local().await
+    }
 }
 
 /// Monedas del usuario salvo el dólar, que es la base de los tipos guardados.

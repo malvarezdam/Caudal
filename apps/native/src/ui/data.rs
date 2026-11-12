@@ -136,6 +136,55 @@ pub fn confirm_delete_all(ui: &mut Ui, lang: Lang) -> Outcome {
     outcome
 }
 
+pub fn confirm_delete_account_dialog(ui: &mut Ui, final_step: bool, lang: Lang) -> Outcome {
+    let t = texts(lang);
+    title(ui, t.delete_account);
+    if final_step {
+        ui.label(muted(ui, t.delete_account_final));
+        ui.add_space(8.0);
+        let mut outcome = Outcome::Keep;
+        ui.horizontal(|ui| {
+            if ui
+                .button(
+                    RichText::new(t.delete_account_confirm)
+                        .strong()
+                        .color(tone_color(ui, Tone::Negative)),
+                )
+                .clicked()
+            {
+                outcome = Outcome::Send(Command::DeleteAccount);
+            }
+            if ui.button(t.cancel).clicked() {
+                outcome = Outcome::Close;
+            }
+        });
+        outcome
+    } else {
+        ui.label(muted(ui, t.delete_account_warning));
+        ui.add_space(8.0);
+        let mut outcome = Outcome::Keep;
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(t.export_backup).clicked() {
+                outcome = Outcome::SendAndKeep(Command::ExportBackup);
+            }
+            if ui
+                .button(
+                    RichText::new(t.delete_account_continue)
+                        .strong()
+                        .color(tone_color(ui, Tone::Negative)),
+                )
+                .clicked()
+            {
+                outcome = Outcome::Replace(Dialog::ConfirmDeleteAccount { final_step: true });
+            }
+            if ui.button(t.cancel).clicked() {
+                outcome = Outcome::Close;
+            }
+        });
+        outcome
+    }
+}
+
 pub fn set_pin_dialog(
     ui: &mut Ui,
     pin: &mut String,

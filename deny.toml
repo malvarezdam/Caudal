@@ -1,0 +1,50 @@
+# Configuración de cargo-deny para Caudal.
+# Audita vulnerabilidades (RustSec), licencias y origen de las dependencias.
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # paste 1.0.15 está archivado por su autor, pero leptos 0.8 y sus macros
+    # dependen de él transitivamente y no tiene vulnerabilidades conocidas.
+    { id = "RUSTSEC-2024-0436", reason = "Dependencia transitiva de leptos 0.8 (macro proc en compilación); sin vulnerabilidad de seguridad." },
+    # ttf-parser 0.25.1 viene por winit -> sctk-adwaita -> ab_glyph (solo en Linux/Wayland).
+    # Caudal compila para Windows, Android y Web, y eframe 0.37 usa winit 0.30.
+    { id = "RUSTSEC-2026-0192", reason = "Dependencia transitiva de winit 0.30 (sctk-adwaita en Wayland); no hay reemplazo publicado en winit 0.30." },
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "0BSD",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+
+[licenses.private]
+# Los paquetes propios de Caudal tienen `publish = false` y `license = "UNLICENSED"`.
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+# Los paquetes internos del workspace se enlazan por `path` sin versión fija.
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

@@ -114,6 +114,7 @@ pub enum Dialog {
     Trade(caudal_app_state::investments::TradeForm),
     Alert(caudal_app_state::investments::AlertForm),
     ConfirmDeleteAll,
+    ConfirmDeleteAccount(bool),
     SetPin(String),
     Rule(caudal_app_state::rules::RuleForm),
     Template(caudal_app_state::rules::TemplateForm),
@@ -132,6 +133,7 @@ pub enum DialogKind {
     Trade,
     Alert,
     ConfirmDeleteAll,
+    ConfirmDeleteAccount,
     SetPin,
     Rule,
     Template,
@@ -178,6 +180,7 @@ impl Dialog {
             Dialog::Trade(_) => DialogKind::Trade,
             Dialog::Alert(_) => DialogKind::Alert,
             Dialog::ConfirmDeleteAll => DialogKind::ConfirmDeleteAll,
+            Dialog::ConfirmDeleteAccount(_) => DialogKind::ConfirmDeleteAccount,
             Dialog::SetPin(_) => DialogKind::SetPin,
             Dialog::Rule(_) => DialogKind::Rule,
             Dialog::Template(_) => DialogKind::Template,
@@ -845,6 +848,51 @@ impl AppState {
                 Ok(_) => state.after_write().await,
                 Err(error) => state.report(error),
             }
+        });
+    }
+
+    pub fn delete_account(&self) {
+        let state = *self;
+        state.busy.set(true);
+        leptos::task::spawn_local(async move {
+            let demo = matches!(
+                state.session.get_untracked(),
+                Session::SignedIn { demo: true, .. }
+            );
+            if demo {
+                if let Some(core) = state.core() {
+                    let _ = core.clear_local().await;
+                }
+            } else {
+                let user_id = state.client().session().map(|s| s.user.id);
+                if let Some(core) = state.core()
+                    && let Err(error) = core.delete_account(&state.client()).await
+                {
+                    state.report(error);
+                    state.busy.set(false);
+                    return;
+                }
+                remove_key(SESSION_KEY);
+                // IndexedDB no borra una base con la conexión abierta: la petición
+                // queda en espera. Se suelta la conexión y el borrado se completa solo,
+                // sin que la app se quede esperando.
+                state.core.set_value(None);
+                if let Some(id) = user_id {
+                    leptos::task::spawn_local(async move {
+                        let _ = caudal_store_idb::delete_database(&format!("caudal-{id}")).await;
+                    });
+                }
+            }
+            state.client().set_session(None);
+            state.core.set_value(None);
+            state.data.set(Arc::new(Data::default()));
+            state.dialog.set(None);
+            state.first_sync_done.set(false);
+            state.recovery_verified.set(false);
+            state.sync.set(SyncState::Synced);
+            state.page.set(Page::Home);
+            state.busy.set(false);
+            state.session.set(Session::SignedOut);
         });
     }
 

@@ -74,3 +74,57 @@ async fn espera_sin_red_y_se_sube_despues() {
         .unwrap();
     assert_eq!(remote.as_deref(), Some(&png[..]));
 }
+
+#[tokio::test]
+async fn eliminar_cuenta_limpia_storage_remoto_y_almacen_local() {
+    let core = AppCore::open(MemoryStore::default(), USER, || 1_000, || 1)
+        .await
+        .unwrap();
+    let data = core.load().await.unwrap();
+    let png = [0x89u8, 0x50, 0x4E, 0x47, 1, 2, 3];
+    let attachment = new_attachment(&data, Uuid::from_u128(5), "boleta.png", &png).unwrap();
+    core.add_attachment(&attachment, &png).await.unwrap();
+
+    let server = MockServer::start().await;
+    let client = SupabaseClient::new(SupabaseConfig {
+        url: server.uri(),
+        publishable_key: "sb_publishable_prueba".into(),
+    });
+    client.set_session(Some(Session {
+        access_token: "t".into(),
+        refresh_token: "r".into(),
+        expires_at: 4_000_000_000,
+        user: SessionUser {
+            id: USER,
+            email: None,
+        },
+    }));
+
+    Mock::given(method("POST"))
+        .and(path("/storage/v1/object/list/receipts"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let object = format!("/storage/v1/object/receipts/{}", attachment.storage_path);
+    Mock::given(method("DELETE"))
+        .and(path(object))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/v1/rpc/delete_account"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(null)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    core.delete_account(&client).await.unwrap();
+
+    assert_eq!(client.session(), None);
+
+    let loaded = core.load().await.unwrap();
+    assert!(loaded.attachments.is_empty());
+    assert!(core.pending_attachments().await.unwrap().is_empty());
+}

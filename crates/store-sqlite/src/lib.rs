@@ -6,7 +6,10 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
-const SCHEMA: &str = "
+const SCHEMA_VERSION_KEY: &str = "schema_version";
+const LOCAL_SCHEMA_VERSION: u32 = 2;
+
+const SCHEMA_V1: &str = "
     create table if not exists records (
         tbl text not null,
         id text not null,
@@ -21,7 +24,10 @@ const SCHEMA: &str = "
     );
     create table if not exists cursors (tbl text primary key, seq integer not null);
     create table if not exists meta (key text primary key, value text not null);
-    pragma user_version = 1;
+";
+
+const MIGRATION_V2: &str = "
+    create index if not exists outbox_tbl_id_idx on outbox (tbl, id);
 ";
 
 #[derive(Debug, thiserror::Error)]
@@ -51,11 +57,48 @@ impl SqliteStore {
         Self::init(Connection::open_in_memory()?)
     }
 
-    fn init(conn: Connection) -> Result<Self, SqliteStoreError> {
-        conn.execute_batch(SCHEMA)?;
+    fn init(mut conn: Connection) -> Result<Self, SqliteStoreError> {
+        Self::migrate(&mut conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    fn migrate(conn: &mut Connection) -> Result<(), SqliteStoreError> {
+        conn.execute_batch(SCHEMA_V1)?;
+        let current: u32 = match conn
+            .query_row(
+                "select value from meta where key = ?1",
+                [SCHEMA_VERSION_KEY],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+        {
+            Some(text) => text
+                .parse::<u32>()
+                .map_err(|_| SqliteStoreError::Corrupt(format!("{SCHEMA_VERSION_KEY}: {text}")))?,
+            None => 1,
+        };
+        if current > LOCAL_SCHEMA_VERSION {
+            return Err(SqliteStoreError::Corrupt(format!(
+                "versión de esquema no soportada: {current} > {LOCAL_SCHEMA_VERSION}"
+            )));
+        }
+        for target in (current + 1)..=LOCAL_SCHEMA_VERSION {
+            let tx = conn.transaction()?;
+            match target {
+                2 => tx.execute_batch(MIGRATION_V2)?,
+                _ => unreachable!("migración {target} no definida"),
+            }
+            tx.execute(
+                "insert into meta (key, value) values (?1, ?2)
+                 on conflict (key) do update set value = excluded.value",
+                params![SCHEMA_VERSION_KEY, target.to_string()],
+            )?;
+            tx.pragma_update(None, "user_version", target)?;
+            tx.commit()?;
+        }
+        Ok(())
     }
 
     fn lock(&self) -> MutexGuard<'_, Connection> {
@@ -355,5 +398,95 @@ mod tests {
         assert_eq!(in_a, in_b);
         assert_eq!(in_a[0].1, "A editado en B");
         assert!(in_a[1].2);
+    }
+
+    #[test]
+    fn migra_una_base_version_1_creada_a_mano_y_la_deja_usable() {
+        let dir = std::env::temp_dir().join(format!("caudal-sqlite-v1-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("v1.db");
+        let _ = std::fs::remove_file(&path);
+
+        let id = Uuid::from_u128(101);
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "create table records (
+                    tbl text not null,
+                    id text not null,
+                    updated_at text not null,
+                    row text not null,
+                    primary key (tbl, id)
+                ) without rowid;
+                create table outbox (
+                    seq integer primary key autoincrement,
+                    tbl text not null,
+                    id text not null
+                );
+                create table cursors (tbl text primary key, seq integer not null);
+                create table meta (key text primary key, value text not null);
+                pragma user_version = 1;",
+            )
+            .unwrap();
+            let mut row = tag(101, "Etiqueta de v1");
+            row.insert("user_id".into(), json!(USER.to_string()));
+            row.insert("updated_at".into(), json!("0000019000000000-0001-0001"));
+            row.insert("deleted_at".into(), json!(null));
+            conn.execute(
+                "insert into records (tbl, id, updated_at, row) values (?1, ?2, ?3, ?4)",
+                params![
+                    "tags",
+                    id.to_string(),
+                    "0000019000000000-0001-0001",
+                    serde_json::to_string(&row).unwrap()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "insert into outbox (tbl, id) values ('tags', ?1)",
+                [id.to_string()],
+            )
+            .unwrap();
+            conn.execute("insert into cursors (tbl, seq) values ('tags', 17)", [])
+                .unwrap();
+            conn.execute(
+                "insert into meta (key, value) values ('hlc', '0000019000000000-0001-0001')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let repo = block_on(Repository::open(
+            SqliteStore::open(&path).unwrap(),
+            USER,
+            || 2_000,
+            || 2,
+        ))
+        .unwrap();
+
+        assert_eq!(
+            block_on(repo.store().meta(SCHEMA_VERSION_KEY)).unwrap(),
+            Some(LOCAL_SCHEMA_VERSION.to_string())
+        );
+        let from_v1 = block_on(repo.get(Table::Tags, id)).unwrap().unwrap();
+        assert_eq!(from_v1.row["name"], "Etiqueta de v1");
+        assert_eq!(block_on(repo.store().cursor(Table::Tags)).unwrap(), 17);
+        assert_eq!(block_on(repo.store().outbox(10)).unwrap().len(), 1);
+
+        // El repositorio puede seguir escribiendo y leyendo tras migrar.
+        block_on(repo.save(Table::Tags, tag(102, "Creada en v2"))).unwrap();
+        assert_eq!(block_on(repo.list_active(Table::Tags)).unwrap().len(), 2);
+        assert_eq!(block_on(repo.store().outbox(10)).unwrap().len(), 2);
+        drop(repo);
+
+        // Reabrir en v2 es idempotente y rechaza versiones futuras desconocidas.
+        let store = SqliteStore::open(&path).unwrap();
+        block_on(store.set_meta(SCHEMA_VERSION_KEY, "999")).unwrap();
+        drop(store);
+        assert!(matches!(
+            SqliteStore::open(&path),
+            Err(SqliteStoreError::Corrupt(_))
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

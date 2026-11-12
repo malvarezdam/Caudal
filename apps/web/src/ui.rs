@@ -737,9 +737,22 @@ fn Settings() -> impl IntoView {
                 }).collect_view()}
             </div>
         </section>
+        <section class="card">
+            <h3>{t.legal_title}</h3>
+            <p class="muted small">{t.non_advisory_notice}</p>
+            <details>
+                <summary>{t.privacy_policy}</summary>
+                <pre class="muted small" style="white-space: pre-wrap">{t.privacy_policy_doc}</pre>
+            </details>
+            <details>
+                <summary>{t.terms_of_use}</summary>
+                <pre class="muted small" style="white-space: pre-wrap">{t.terms_of_use_doc}</pre>
+            </details>
+        </section>
         <crate::ui_data::DataCards/>
         <section class="card">
             <button on:click=move |_| state.open_dialog(Dialog::ConfirmSignOut)>{t.sign_out}</button>
+            <button class="danger" on:click=move |_| state.open_dialog(Dialog::ConfirmDeleteAccount(false))>{t.delete_account}</button>
         </section>
     }
 }
@@ -780,6 +793,7 @@ fn Dialogs() -> impl IntoView {
                         DialogKind::Trade => view! { <crate::ui_invest::TradeDialog/> }.into_any(),
                         DialogKind::Alert => view! { <crate::ui_invest::AlertDialog/> }.into_any(),
                         DialogKind::ConfirmDeleteAll => view! { <crate::ui_data::ConfirmDeleteAllDialog/> }.into_any(),
+                        DialogKind::ConfirmDeleteAccount => view! { <crate::ui_data::ConfirmDeleteAccountDialog/> }.into_any(),
                         DialogKind::SetPin => view! { <crate::ui_data::SetPinDialog/> }.into_any(),
                         DialogKind::Rule => view! { <crate::ui_data::RuleDialog/> }.into_any(),
                         DialogKind::Template => view! { <crate::ui_data::TemplateDialog/> }.into_any(),

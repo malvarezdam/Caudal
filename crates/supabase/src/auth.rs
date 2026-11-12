@@ -156,6 +156,23 @@ impl SupabaseClient {
         read_json(response).await.map(|_| ())
     }
 
+    /// Elimina la cuenta del usuario autenticado (`public.delete_account`) y
+    /// cierra la sesión local. Los archivos de Storage deben borrarse antes.
+    pub async fn delete_account(&self) -> Result<(), SupabaseError> {
+        let token = self.access_token().await?;
+        let response = self
+            .http
+            .post(self.endpoint("/rest/v1/rpc/delete_account"))
+            .header("apikey", &self.config.publishable_key)
+            .bearer_auth(token)
+            .json(&json!({}))
+            .send()
+            .await?;
+        read_json(response).await?;
+        self.set_session(None);
+        Ok(())
+    }
+
     async fn auth_post(&self, path: &str, body: Value) -> Result<Value, SupabaseError> {
         let response = self
             .http

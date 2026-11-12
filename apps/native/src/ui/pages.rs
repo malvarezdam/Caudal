@@ -603,12 +603,39 @@ pub fn settings(app: &mut CaudalApp, ui: &mut Ui) {
     });
     ui.add_space(8.0);
 
+    card(ui, |ui| {
+        ui.label(RichText::new(texts.legal_title).strong());
+        ui.label(muted(ui, texts.non_advisory_notice).small());
+        egui::CollapsingHeader::new(texts.privacy_policy)
+            .id_salt("legal-privacy")
+            .show(ui, |ui| {
+                ui.label(muted(ui, texts.privacy_policy_doc).small());
+            });
+        egui::CollapsingHeader::new(texts.terms_of_use)
+            .id_salt("legal-terms")
+            .show(ui, |ui| {
+                ui.label(muted(ui, texts.terms_of_use_doc).small());
+            });
+    });
+    ui.add_space(8.0);
+
     crate::ui::data::settings_cards(app, ui);
 
     card(ui, |ui| {
-        if ui.button(texts.sign_out).clicked() {
-            app.dialog = Some(Dialog::ConfirmSignOut);
-        }
+        ui.horizontal(|ui| {
+            if ui.button(texts.sign_out).clicked() {
+                app.dialog = Some(Dialog::ConfirmSignOut);
+            }
+            if ui
+                .button(
+                    RichText::new(texts.delete_account)
+                        .color(tone_color(ui, caudal_app_state::views::Tone::Negative)),
+                )
+                .clicked()
+            {
+                app.dialog = Some(Dialog::ConfirmDeleteAccount { final_step: false });
+            }
+        });
     });
 }
 

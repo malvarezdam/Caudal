@@ -186,7 +186,7 @@ Estas reglas valen para cualquier agente que trabaje en el repositorio.
 - Sin commits por fase ni por tarea: el usuario hará un solo commit al final. No hacer `git commit`, `push`, `reset`, `checkout` de archivos ni `stash` sin que lo pida.
 - Supabase se configura pegando SQL en el SQL Editor. No usar la CLI de Supabase ni archivos `.env`.
 - Nunca pedir, guardar ni usar contraseñas, la clave secreta de Supabase ni claves de APIs de precios. Esas claves viven solo en los secretos de GitHub. La clave pública sí está en el código.
-- No crear cuentas en el Supabase real. Las pruebas de cuentas son de la Fase 9, con un Supabase local en Docker.
+- En el proyecto Supabase actual, que es de desarrollo y no tiene usuarios reales, solo las pruebas de `crates/app-state/tests/e2e.rs` pueden crear cuentas `caudal-prueba-…`, y las borran al terminar. Nunca usar cuentas ni correos reales del usuario. Cuando exista un proyecto de producción, no se prueba en él.
 
 **Al programar**
 - Leer este archivo y el documento de la fase en curso (`docs/FASE-*.md` y `docs/ROADMAP.md`) antes de empezar.

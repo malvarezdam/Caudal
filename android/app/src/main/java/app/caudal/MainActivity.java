@@ -1,19 +1,32 @@
 package app.caudal;
 
+import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.ExistingWorkPolicy;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 
 import com.google.androidgamesdk.GameActivity;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends GameActivity {
     static {
@@ -23,8 +36,12 @@ public class MainActivity extends GameActivity {
     /** Códigos de las respuestas del selector de documentos. */
     private static final int OPEN_BASE = 1_000_000;
     private static final int SAVE = 2_000_000;
+    private static final int REQ_NOTIFICATIONS = 3_000_000;
     /** Archivos mayores no se leen: la app acepta hasta 10 MB de comprobante. */
     private static final int MAX_BYTES = 32 * 1024 * 1024;
+    private static final String DAILY_WORK_NAME = "caudal-daily-notices";
+    private static final String ONCE_WORK_NAME = "caudal-notices-now";
+    private static final String KEY_PERMISSION_ASKED = "permission_asked";
 
     /** Barras del sistema, muesca y teclado, en píxeles; la interfaz se dibuja dentro. */
     private static native void nativeSetInsets(int left, int top, int right, int bottom);
@@ -35,6 +52,83 @@ public class MainActivity extends GameActivity {
     private static native void nativeFileSaved(boolean ok);
 
     private byte[] pendingSave;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        handleTriggerIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleTriggerIntent(intent);
+    }
+
+    private void handleTriggerIntent(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("run_notices", false)) {
+            enqueueImmediateNoticeCheck();
+        }
+    }
+
+    private void scheduleDailyNotices() {
+        PeriodicWorkRequest daily = new PeriodicWorkRequest.Builder(
+                NoticeWorker.class, 24, TimeUnit.HOURS)
+                .build();
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                DAILY_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                daily);
+    }
+
+    private void enqueueImmediateNoticeCheck() {
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(NoticeWorker.class).build();
+        WorkManager.getInstance(this).enqueueUniqueWork(
+                ONCE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request);
+    }
+
+    /**
+     * Lo llama Rust al actualizar {@code files/notices.json}. El permiso solo se pide la
+     * primera vez que existe algún aviso que mostrar, nunca al abrir la app sin avisos.
+     */
+    public void onNoticesUpdated(boolean hasNotices) {
+        runOnUiThread(() -> {
+            if (!hasNotices) {
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
+                SharedPreferences prefs = getSharedPreferences(
+                        NoticeWorker.PREFS_NAME, Context.MODE_PRIVATE);
+                if (!prefs.getBoolean(KEY_PERMISSION_ASKED, false)) {
+                    prefs.edit().putBoolean(KEY_PERMISSION_ASKED, true).apply();
+                    requestPermissions(
+                            new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                            REQ_NOTIFICATIONS);
+                }
+                return;
+            }
+            scheduleDailyNotices();
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            @NonNull String[] permissions,
+            @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIFICATIONS) {
+            scheduleDailyNotices();
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                enqueueImmediateNoticeCheck();
+            }
+        }
+    }
 
     @Override
     public WindowInsetsCompat onApplyWindowInsets(View view, WindowInsetsCompat insets) {

@@ -403,6 +403,19 @@ pub struct Texts {
     pub nothing_upcoming: &'static str,
     pub installment_label: &'static str,
     pub no_contacts: &'static str,
+    // Legal
+    pub legal_title: &'static str,
+    pub non_advisory_notice: &'static str,
+    pub privacy_policy: &'static str,
+    pub terms_of_use: &'static str,
+    pub privacy_policy_doc: &'static str,
+    pub terms_of_use_doc: &'static str,
+    // Eliminación de cuenta
+    pub delete_account: &'static str,
+    pub delete_account_warning: &'static str,
+    pub delete_account_continue: &'static str,
+    pub delete_account_final: &'static str,
+    pub delete_account_confirm: &'static str,
 }
 
 impl Texts {
@@ -968,6 +981,17 @@ static ES: Texts = Texts {
     nothing_upcoming: "Nada en los próximos 30 días.",
     installment_label: "Cuota",
     no_contacts: "Aún no hay contactos.",
+    legal_title: "Privacidad y condiciones",
+    non_advisory_notice: "Caudal registra y muestra tus datos. No da recomendaciones de inversión ni ejecuta operaciones o pagos.",
+    privacy_policy: "Política de privacidad",
+    terms_of_use: "Términos de uso y aviso de no asesoría",
+    privacy_policy_doc: include_str!("../../../docs/legal/PRIVACIDAD.md"),
+    terms_of_use_doc: include_str!("../../../docs/legal/TERMINOS.md"),
+    delete_account: "Eliminar mi cuenta",
+    delete_account_warning: "Se borrarán de forma permanente tu cuenta, todos tus movimientos, tus comprobantes y los datos de este dispositivo. Antes de continuar puedes guardar una copia completa.",
+    delete_account_continue: "Continuar con la eliminación",
+    delete_account_final: "Confirmación definitiva: esta acción no se puede deshacer y eliminará tu cuenta ahora mismo.",
+    delete_account_confirm: "Sí, eliminar mi cuenta definitivamente",
 };
 
 static EN: Texts = Texts {
@@ -1301,6 +1325,17 @@ static EN: Texts = Texts {
     nothing_upcoming: "Nothing in the next 30 days.",
     installment_label: "Installment",
     no_contacts: "No contacts yet.",
+    legal_title: "Privacy and terms",
+    non_advisory_notice: "Caudal records and displays your data. It does not provide investment advice or execute trades or payments.",
+    privacy_policy: "Privacy policy",
+    terms_of_use: "Terms of use and non-advisory notice",
+    privacy_policy_doc: include_str!("../../../docs/legal/PRIVACY.md"),
+    terms_of_use_doc: include_str!("../../../docs/legal/TERMS.md"),
+    delete_account: "Delete my account",
+    delete_account_warning: "Your account, all your transactions, your receipts and the data on this device will be permanently deleted. Before continuing you can save a full backup.",
+    delete_account_continue: "Continue with deletion",
+    delete_account_final: "Final confirmation: this action cannot be undone and will delete your account right now.",
+    delete_account_confirm: "Yes, permanently delete my account",
 };
 
 impl Texts {
@@ -1386,5 +1421,18 @@ mod tests {
             texts(Lang::En).transaction_kind(TransactionKind::Expense),
             "Expense"
         );
+    }
+
+    #[test]
+    fn textos_legales_incluyen_marcadores_y_no_asesoria() {
+        for lang in Lang::ALL {
+            let t = texts(lang);
+            assert!(t.privacy_policy_doc.contains("[RESPONSABLE]"));
+            assert!(t.privacy_policy_doc.contains("[CORREO DE CONTACTO]"));
+            assert!(t.privacy_policy_doc.contains("Supabase"));
+            assert!(t.privacy_policy_doc.contains("EODHD"));
+            assert!(t.terms_of_use_doc.contains("[RESPONSABLE]"));
+            assert!(t.terms_of_use_doc.contains("[CORREO DE CONTACTO]"));
+        }
     }
 }

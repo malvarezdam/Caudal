@@ -87,6 +87,7 @@ pub enum Command {
     ExportBackup,
     RestoreBackup(String),
     DeleteAllData,
+    DeleteAccount,
     Import(Vec<Transaction>),
     AddAttachment {
         attachment: Box<caudal_app_state::model::Attachment>,
@@ -342,7 +343,15 @@ impl Worker {
             self.error(error.message(self.lang.get()));
         }
         match core.load().await {
-            Ok(data) => self.emit(Event::Data(Arc::new(data))),
+            Ok(data) => {
+                crate::android::write_notices(
+                    &self.platform.data_dir,
+                    &data,
+                    today(),
+                    self.lang.get(),
+                );
+                self.emit(Event::Data(Arc::new(data)));
+            }
             Err(error) => self.error(error.message(self.lang.get())),
         }
         if let Ok(pending) = core.pending_attachments().await {
@@ -380,7 +389,10 @@ impl Worker {
         let lang = self.lang.get();
         let auth_error = |error: &auth::SupabaseError| auth::error_message(error, lang);
         match command {
-            Command::SetLang(lang) => self.lang.set(lang),
+            Command::SetLang(lang) => {
+                self.lang.set(lang);
+                self.reload().await;
+            }
             Command::SignIn { email, password } => {
                 self.emit(Event::Busy(true));
                 match self.client.sign_in(email.trim(), &password).await {
@@ -432,6 +444,12 @@ impl Worker {
                 self.client.set_session(None);
                 *self.core.borrow_mut() = None;
                 self.demo.set(false);
+                crate::android::write_notices(
+                    &self.platform.data_dir,
+                    &Data::default(),
+                    today(),
+                    self.lang.get(),
+                );
                 self.emit(Event::SignedOut);
             }
             Command::Onboard {
@@ -540,6 +558,46 @@ impl Worker {
                     Ok(_) => self.after_write().await,
                     Err(error) => self.error(error.message(lang)),
                 }
+            }
+            Command::DeleteAccount => {
+                self.emit(Event::Busy(true));
+                if self.demo.get() {
+                    if let Some(core) = self.core() {
+                        let _ = core.clear_local().await;
+                    }
+                } else {
+                    let user_id = self.client.session().map(|s| s.user.id);
+                    if let Some(core) = self.core()
+                        && let Err(error) = core.delete_account(&self.client).await
+                    {
+                        self.error(error.message(lang));
+                        self.emit(Event::Busy(false));
+                        return;
+                    }
+                    self.platform.session().clear();
+                    // Primero se cierra la base: con la conexión abierta, Windows no deja
+                    // borrar el archivo y los datos quedarían en el dispositivo.
+                    *self.core.borrow_mut() = None;
+                    if let Some(id) = user_id {
+                        let path = self.platform.database_path(&format!("caudal-{id}"));
+                        for suffix in ["", "-wal", "-shm", "-journal"] {
+                            let mut file = path.clone().into_os_string();
+                            file.push(suffix);
+                            let _ = std::fs::remove_file(file);
+                        }
+                    }
+                }
+                self.client.set_session(None);
+                *self.core.borrow_mut() = None;
+                self.demo.set(false);
+                crate::android::write_notices(
+                    &self.platform.data_dir,
+                    &Data::default(),
+                    today(),
+                    self.lang.get(),
+                );
+                self.emit(Event::Busy(false));
+                self.emit(Event::SignedOut);
             }
             Command::Import(transactions) => {
                 let Some(core) = self.core() else { return };

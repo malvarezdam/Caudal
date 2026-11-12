@@ -272,6 +272,43 @@ pub fn ConfirmDeleteAllDialog() -> impl IntoView {
 }
 
 #[component]
+pub fn ConfirmDeleteAccountDialog() -> impl IntoView {
+    let state = state();
+    let lang = state.lang.get_untracked();
+    let t = texts(lang);
+    let final_step = read(|d| match d {
+        Dialog::ConfirmDeleteAccount(step) => Some(step),
+        _ => None,
+    });
+    view! {
+        <h2>{t.delete_account}</h2>
+        {move || if final_step().unwrap_or(false) {
+            view! {
+                <p class="muted">{t.delete_account_final}</p>
+                <div class="row">
+                    <button class="danger" on:click=move |_| {
+                        close(state);
+                        state.delete_account();
+                    }>{t.delete_account_confirm}</button>
+                    <button on:click=move |_| close(state)>{t.cancel}</button>
+                </div>
+            }.into_any()
+        } else {
+            view! {
+                <p class="muted">{t.delete_account_warning}</p>
+                <div class="row">
+                    <button on:click=move |_| state.export_backup()>{t.export_backup}</button>
+                    <button class="danger" on:click=move |_| {
+                        state.open_dialog(Dialog::ConfirmDeleteAccount(true));
+                    }>{t.delete_account_continue}</button>
+                    <button on:click=move |_| close(state)>{t.cancel}</button>
+                </div>
+            }.into_any()
+        }}
+    }
+}
+
+#[component]
 pub fn SetPinDialog() -> impl IntoView {
     let state = state();
     let lang = state.lang.get_untracked();

@@ -90,6 +90,9 @@ pub enum Dialog {
         error: Option<String>,
     },
     ConfirmDeleteAll,
+    ConfirmDeleteAccount {
+        final_step: bool,
+    },
     SetPin {
         pin: String,
         error: Option<String>,
@@ -202,6 +205,9 @@ pub fn show(app: &mut CaudalApp, ctx: &egui::Context) {
                     super::invest::alert_dialog(ui, &data, form, error, lang)
                 }
                 Dialog::ConfirmDeleteAll => super::data::confirm_delete_all(ui, lang),
+                Dialog::ConfirmDeleteAccount { final_step } => {
+                    super::data::confirm_delete_account_dialog(ui, *final_step, lang)
+                }
                 Dialog::SetPin { pin, error } => super::data::set_pin_dialog(ui, pin, error, lang),
                 Dialog::Rule { form, error } => {
                     super::data::rule_dialog(ui, &data, form, error, lang)

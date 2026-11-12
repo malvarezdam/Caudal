@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use wasm_bindgen::JsValue;
 
+const SCHEMA_VERSION_KEY: &str = "schema_version";
+const LOCAL_SCHEMA_VERSION: u32 = 2;
+
 const RECORDS: &str = "records";
 const OUTBOX: &str = "outbox";
 const META: &str = "meta";
@@ -45,14 +48,46 @@ impl IdbStore {
     /// Una base por usuario evita mezclar datos al cambiar de cuenta.
     pub async fn open(name: &str) -> Result<Self, IdbError> {
         let db = Rexie::builder(name)
-            .version(1)
+            .version(LOCAL_SCHEMA_VERSION)
             .add_object_store(ObjectStore::new(RECORDS))
             .add_object_store(ObjectStore::new(OUTBOX))
             .add_object_store(ObjectStore::new(META))
             .build()
             .await?;
-        Ok(Self { db })
+        let store = Self { db };
+        store.migrate().await?;
+        Ok(store)
     }
+
+    /// Elimina por completo la base de datos IndexedDB del usuario.
+    pub async fn delete_database(name: &str) -> Result<(), IdbError> {
+        Rexie::delete(name).await?;
+        Ok(())
+    }
+
+    async fn migrate(&self) -> Result<(), IdbError> {
+        let current: u32 = match self.meta(SCHEMA_VERSION_KEY).await? {
+            Some(text) => text.parse::<u32>().map_err(|_| IdbError::Corrupt)?,
+            None => 1,
+        };
+        if current > LOCAL_SCHEMA_VERSION {
+            return Err(IdbError::Corrupt);
+        }
+        for target in (current + 1)..=LOCAL_SCHEMA_VERSION {
+            match target {
+                2 => {}
+                _ => unreachable!("migración {target} no definida"),
+            }
+            self.set_meta(SCHEMA_VERSION_KEY, &target.to_string())
+                .await?;
+        }
+        Ok(())
+    }
+}
+
+/// Elimina por completo la base de datos IndexedDB del usuario.
+pub async fn delete_database(name: &str) -> Result<(), IdbError> {
+    IdbStore::delete_database(name).await
 }
 
 fn record_key(table: Table, id: Uuid) -> JsValue {

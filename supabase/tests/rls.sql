@@ -243,12 +243,50 @@ begin
   exception when check_violation then null;
   end;
 
-  -- Eliminar la cuenta borra todos sus datos.
-  delete from auth.users where id = a;
+  -- Eliminar la cuenta: solo quien llama puede borrarse a sí mismo; no recibe parámetros
+  -- (así A nunca puede pedir borrar a B) y borrar a A no toca nada de B.
+  insert into public.profiles (id, user_id, updated_at) values (b, b, '0001');
+  insert into public.accounts (id, user_id, updated_at, name, currency)
+    values (gen_random_uuid(), b, '0001', 'Cuenta de B', 'USD');
+
+  select count(*) into n
+    from pg_proc p
+    join pg_namespace ns on ns.oid = p.pronamespace
+    where ns.nspname = 'public' and p.proname = 'delete_account' and p.pronargs <> 0;
+  if n <> 0 then
+    raise exception 'FALLO: delete_account no debe aceptar parámetros que permitan borrar a otro';
+  end if;
+
+  perform set_config('request.jwt.claims', '', true);
+  perform set_config('role', 'anon', true);
+  begin
+    perform public.delete_account();
+    raise exception 'FALLO: anon ejecuta delete_account' using errcode = 'P0001';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('request.jwt.claims', claims_a, true);
+  perform set_config('role', 'authenticated', true);
+  perform public.delete_account();
+  perform set_config('role', 'none', true);
+  perform set_config('request.jwt.claims', '', true);
+
+  select count(*) into n from auth.users where id = a;
+  if n <> 0 then raise exception 'FALLO: A sigue en auth.users tras delete_account'; end if;
+
   foreach t in array user_tables loop
     execute format('select count(*) from public.%I where user_id = $1', t) into n using a;
-    if n <> 0 then raise exception 'FALLO: quedan datos en % tras eliminar la cuenta', t; end if;
+    if n <> 0 then raise exception 'FALLO: quedan datos de A en % tras eliminar la cuenta', t; end if;
   end loop;
+
+  select count(*) into n from auth.users where id = b;
+  if n <> 1 then raise exception 'FALLO: delete_account de A borró a B de auth.users'; end if;
+  select count(*) into n from public.profiles where user_id = b;
+  if n <> 1 then raise exception 'FALLO: delete_account de A borró el perfil de B'; end if;
+  select count(*) into n from public.accounts where user_id = b;
+  if n <> 1 then raise exception 'FALLO: delete_account de A borró las cuentas de B'; end if;
+  select count(*) into n from public.assets where user_id = b;
+  if n <> 1 then raise exception 'FALLO: delete_account de A borró los activos de B'; end if;
 end;
 $$;
 

@@ -325,3 +325,61 @@ async fn sube_y_baja_comprobantes_en_la_carpeta_del_usuario() {
         .unwrap_err();
     assert!(error.to_string().contains("not found"), "{error}");
 }
+
+#[tokio::test]
+async fn elimina_archivos_y_cuenta_del_usuario() {
+    let server = MockServer::start().await;
+    let file1 = format!("{USER}/boleta1.jpg");
+    let file2 = format!("{USER}/boleta2.pdf");
+
+    Mock::given(method("POST"))
+        .and(wiremock::matchers::path("/storage/v1/object/list/receipts"))
+        .and(header("authorization", "Bearer viejo"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {"name": "boleta1.jpg"}
+        ])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(wiremock::matchers::path(format!(
+            "/storage/v1/object/receipts/{file1}"
+        )))
+        .and(header("authorization", "Bearer viejo"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"message": "Successfully deleted"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(wiremock::matchers::path(format!(
+            "/storage/v1/object/receipts/{file2}"
+        )))
+        .and(header("authorization", "Bearer viejo"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"message": "Successfully deleted"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(wiremock::matchers::path("/rest/v1/rpc/delete_account"))
+        .and(header("authorization", "Bearer viejo"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!(null)))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client(&server);
+    signed_in(&client, 4_000_000_000);
+
+    let deleted = client.delete_user_receipts(&[file2]).await.unwrap();
+    assert_eq!(deleted, 2);
+
+    client.delete_account().await.unwrap();
+    assert_eq!(client.session(), None);
+}
